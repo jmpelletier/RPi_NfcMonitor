@@ -4,16 +4,20 @@
 #   TAG_FOUND, <timestamp>, <tag_id>   -> a card was detected
 #   NO_TAG, <timestamp>                -> no card is present
 #
-# We don't know in advance which port the reader is plugged into, so we scan
-# all available ports and test each one until we find it.
+# We don't know in advance which port the reader is plugged into, so we look
+# at the available serial ports. A mouse and keyboard are also connected, but
+# they don't appear as serial ports, so the reader is expected to be the only
+# device found.
 
 
 # このプログラムは、USBシリアル接続を監視し、独自のNFCタグリーダーからのメッセージを受信します。
 # リーダーは、以下の2種類のテキスト形式でメッセージを送信します。
 #   TAG_FOUND, <timestamp>, <tag_id>   -> カードを検出した場合
 #   NO_TAG, <timestamp>                -> カードがない場合
-# リーダーがどのポートに接続されているか事前にはわからないため、
-# 利用可能なすべてのポートを順に調べてリーダーを探します。
+# リーダーがどのポートに接続されているか事前にはわからないため、利用可能な
+# シリアルポートを確認します。マウスとキーボードも接続されていますが、
+# これらはシリアルポートとして認識されないため、見つかるのはリーダーの
+# ポートだけのはずです。
 
 import time
 import serial
@@ -24,21 +28,18 @@ READ_TIMEOUT = 1  # Max seconds to wait for a line before giving up / 1行を待
 
 
 def find_reader_port():
-    # Try each serial port in turn: open it briefly and check whether the
-    # incoming text looks like a message from our reader.
-    # 各シリアルポートを順番に試し、一時的に開いて受信データが
-    # 目的のリーダーからのメッセージかどうかを確認する。
-    for port in serial.tools.list_ports.comports():
-        try:
-            with serial.Serial(port.device, BAUD_RATE, timeout=READ_TIMEOUT) as ser:
-                line = ser.readline().decode("utf-8", errors="ignore").strip()
-                if line.startswith("TAG_FOUND") or line.startswith("NO_TAG"):
-                    return port.device
-        except (OSError, serial.SerialException):
-            # This port didn't work (e.g. busy or not our device) -- skip it.
-            # このポートは使用できなかった（使用中や対象外など）ためスキップする。
-            continue
-    return None
+    # A mouse and keyboard never show up here -- only devices with a serial
+    # interface do. So as long as the reader is the only such device plugged
+    # in, it's simply whichever port the system finds.
+    # マウスやキーボードはシリアルポートとして認識されないため、ここには
+    # 表示されない。リーダーが唯一のシリアルデバイスである限り、
+    # 見つかったポートがそのままリーダーだと分かる。
+    ports = serial.tools.list_ports.comports()
+    if not ports:
+        return None
+    if len(ports) > 1:
+        print(f"Warning: found {len(ports)} serial devices, expected 1. Using {ports[0].device}.")
+    return ports[0].device
 
 
 def parse_message(line):
